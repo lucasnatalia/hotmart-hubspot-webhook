@@ -9,6 +9,7 @@ app.use(express.urlencoded({ extended: true }));
 const HUBSPOT_TOKEN = process.env.HUBSPOT_TOKEN;
 const HOTMART_SECRET = process.env.HOTMART_SECRET;
 const OWNER_EMAIL = process.env.OWNER_EMAIL || "";
+log('HAS_TOKEN?', !!HUBSPOT_TOKEN, 'LEN:', (HUBSPOT_TOKEN||'').length);
 
 function log(...args) {
   try { console.log('[hotmart-webhook]', ...args); } catch (_) {}
