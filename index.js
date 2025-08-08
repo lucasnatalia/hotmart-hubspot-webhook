@@ -59,9 +59,9 @@ async function upsertContact({ email, produto, status }) {
 }
 
 function extractHotmartFields(body) {
-  // EMAIL (cobre payloads antigos e o atual v2.0 da Hotmart)
+  // EMAIL
   const email =
-    body?.data?.buyer?.email ||           // ← este é o do seu log
+    body?.data?.buyer?.email ||
     body?.buyer?.email ||
     body?.data?.buyer_email ||
     body?.email ||
@@ -73,31 +73,32 @@ function extractHotmartFields(body) {
 
   // PRODUTO
   const produto =
-    body?.data?.product?.name ||           // ← este é o do seu log
+    body?.data?.product?.name ||
     body?.product?.name ||
     body?.purchase?.product?.name ||
     body?.item?.name ||
     body?.product_name ||
     '';
 
-  // STATUS (normaliza para minúsculo e termos que você usa nas listas)
+  // STATUS (entrada pode vir como APPROVED / PURCHASE_APPROVED etc.)
   const rawStatus =
-    body?.data?.purchase?.status ||        // e.g. "APPROVED"
+    body?.data?.purchase?.status ||        // "APPROVED"
     body?.status ||
     body?.purchase_status ||
     body?.data?.status ||
-    body?.event ||                         // e.g. "PURCHASE_APPROVED"
+    body?.event ||                         // "PURCHASE_APPROVED"
     body?.transaction?.status ||
     body?.purchase?.status ||
     '';
 
-  // Normalização
+  // Normalização para os RÓTULOS que existem no seu HubSpot
   const s = String(rawStatus).toLowerCase();
-  let status = s;
-  if (s === 'approved' || s === 'purchase_approved') status = 'approved';
-  if (s === 'refunded' || s === 'refund' || s === 'purchase_refunded') status = 'refunded';
-  if (s === 'chargeback' || s === 'purchase_chargeback') status = 'chargeback';
-  if (!status) status = 'pending';
+  let statusLabel = 'Aguardando pagamento'; // default
+
+  if (s.includes('approved')) statusLabel = 'Compra Aprovada';
+  else if (s.includes('refund')) statusLabel = 'Pedido de Reembolso';
+  else if (s.includes('chargeback')) statusLabel = 'Chargeback';
+  else if (s.includes('pending') || s.includes('waiting') || s.includes('aguard')) statusLabel = 'Aguardando pagamento';
 
   const eventId =
     body?.id ||
@@ -107,7 +108,7 @@ function extractHotmartFields(body) {
     body?.purchase?.id ||
     null;
 
-  return { email, status, produto, eventId };
+  return { email, status: statusLabel, produto, eventId };
 }
 
 // Aceita qualquer método, mas só processa POST
