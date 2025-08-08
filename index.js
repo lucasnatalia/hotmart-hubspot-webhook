@@ -87,21 +87,18 @@ function extractHotmartFields(body) {
   return { email, status: String(status).toLowerCase(), produto, eventId };
 }
 
-// Simple idempotency store (ok in serverless short-lived)
-const processed = new Set();
-
-// GET /hotmart just for quick debug in browser
-app.get('/hotmart', (req, res) => {
-  res.status(200).send('ok (GET) — use POST from Hotmart to process events');
-});
-
-app.post('/hotmart', async (req, res) => {
+// Aceita qualquer método, mas só processa POST
+app.all('/hotmart', async (req, res) => {
   const safeBody = JSON.stringify(req.body || {});
+  log('METHOD:', req.method, 'PATH:', req.path);
   log('REQ headers:', JSON.stringify(req.headers || {}));
   log('REQ body:', safeBody.slice(0, 4000));
 
+  if (req.method !== 'POST') {
+    return res.status(200).send(`ok (${req.method}) — POST from Hotmart will be processed`);
+  }
+
   try {
-    // Accept secret from multiple places: headers, query, body (including legacy hottok)
     const incomingSecret =
       req.headers['x-hotmart-secret'] ||
       req.headers['x-hotmart-signature'] ||
@@ -121,22 +118,22 @@ app.post('/hotmart', async (req, res) => {
       }
     }
 
-    const body = req.body || {};
-    const { email, status, produto, eventId } = extractHotmartFields(body);
+    const { email, status, produto, eventId } = extractHotmartFields(req.body || {});
     log('EXTRACTED → email:', email, '| status:', status, '| produto:', produto, '| eventId:', eventId);
 
     if (!email) {
-      log('No email found in payload. Body keys:', Object.keys(body || {}));
+      log('No email found in payload. Body keys:', Object.keys(req.body || {}));
       return res.status(200).send('no-email');
     }
 
+    app.locals._processed = app.locals._processed || new Set();
     if (eventId) {
-      if (processed.has(eventId)) {
+      if (app.locals._processed.has(eventId)) {
         log('Duplicate event ignored:', eventId);
         return res.status(200).send('duplicate');
       }
-      processed.add(eventId);
-      setTimeout(() => processed.delete(eventId), 60 * 60 * 1000);
+      app.locals._processed.add(eventId);
+      setTimeout(() => app.locals._processed.delete(eventId), 60 * 60 * 1000);
     }
 
     await upsertContact({ email, produto, status });
@@ -148,6 +145,6 @@ app.post('/hotmart', async (req, res) => {
   }
 });
 
-app.get('/', (_, res) => res.send('Hotmart → HubSpot webhook is online (hottok build)'));
+app.get('/', (_, res) => res.send('Hotmart → HubSpot webhook is online (catch-all build)'));
 
 module.exports = app;
