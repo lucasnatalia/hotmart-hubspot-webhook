@@ -59,33 +59,55 @@ async function upsertContact({ email, produto, status }) {
 }
 
 function extractHotmartFields(body) {
-  const email = body?.buyer?.email
-    || body?.data?.buyer_email
-    || body?.email
-    || body?.checkout_data?.customer_email
-    || body?.purchase?.buyer_email
-    || body?.payer_email
-    || body?.customer?.email
-    || null;
+  // EMAIL (cobre payloads antigos e o atual v2.0 da Hotmart)
+  const email =
+    body?.data?.buyer?.email ||           // ← este é o do seu log
+    body?.buyer?.email ||
+    body?.data?.buyer_email ||
+    body?.email ||
+    body?.checkout_data?.customer_email ||
+    body?.purchase?.buyer_email ||
+    body?.payer_email ||
+    body?.customer?.email ||
+    null;
 
-  const status = body?.status
-    || body?.purchase_status
-    || body?.data?.status
-    || body?.event
-    || body?.transaction?.status
-    || body?.purchase?.status
-    || '';
+  // PRODUTO
+  const produto =
+    body?.data?.product?.name ||           // ← este é o do seu log
+    body?.product?.name ||
+    body?.purchase?.product?.name ||
+    body?.item?.name ||
+    body?.product_name ||
+    '';
 
-  const produto = body?.product?.name
-    || body?.data?.product_name
-    || body?.purchase?.product?.name
-    || body?.item?.name
-    || body?.product_name
-    || '';
+  // STATUS (normaliza para minúsculo e termos que você usa nas listas)
+  const rawStatus =
+    body?.data?.purchase?.status ||        // e.g. "APPROVED"
+    body?.status ||
+    body?.purchase_status ||
+    body?.data?.status ||
+    body?.event ||                         // e.g. "PURCHASE_APPROVED"
+    body?.transaction?.status ||
+    body?.purchase?.status ||
+    '';
 
-  const eventId = body?.id || body?.event_id || body?.transaction?.id || body?.purchase?.id || null;
+  // Normalização
+  const s = String(rawStatus).toLowerCase();
+  let status = s;
+  if (s === 'approved' || s === 'purchase_approved') status = 'approved';
+  if (s === 'refunded' || s === 'refund' || s === 'purchase_refunded') status = 'refunded';
+  if (s === 'chargeback' || s === 'purchase_chargeback') status = 'chargeback';
+  if (!status) status = 'pending';
 
-  return { email, status: String(status).toLowerCase(), produto, eventId };
+  const eventId =
+    body?.id ||
+    body?.event_id ||
+    body?.data?.id ||
+    body?.transaction?.id ||
+    body?.purchase?.id ||
+    null;
+
+  return { email, status, produto, eventId };
 }
 
 // Aceita qualquer método, mas só processa POST
